@@ -16,3 +16,7 @@ class ProgramSuggestion(BaseModel):
 class Confirmation(BaseModel):
     accepted: bool
     additional_info: str = ""
+
+class WorkoutPlan(BaseModel):
+    title: str
+    details: str
