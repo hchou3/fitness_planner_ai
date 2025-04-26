@@ -1,6 +1,7 @@
 from uagents import Agent, Context
 from tools.models import UserStats, Confirmation, ProgramSuggestion, WorkoutPlan
 from tools.protocols import fitness_protocol
+import httpx
 from tools.db import init_db, save_user_stats, get_user_stats
 init_db()
 
@@ -27,8 +28,7 @@ async def handle_confirmation(ctx: Context, sender: str, confirmation: Confirmat
         return
 
     if confirmation.accepted:
-        #add llm later
-        plan = generate_workout_plan(user)
+        plan = await generate_workout_plan(user)
         await ctx.send(sender, plan)
         ctx.logger.info(f"[coach_agent] Sent workout plan to {sender}")
     else:
@@ -36,21 +36,26 @@ async def handle_confirmation(ctx: Context, sender: str, confirmation: Confirmat
         await ctx.send(sender, Confirmation(accepted=False, additional_info=response))
         ctx.logger.info(f"[coach_agent] Requested more info from {sender}")
 
-def generate_workout_plan(user: UserStats) -> WorkoutPlan:
-    #Testing
-    if user.goal.lower() in ["build muscle", "strength"]:
-        program = "Strength Training"
-        weeks = 8
-    elif user.goal.lower() in ["lose weight", "fat loss"]:
-        program = "Cardio + Endurance"
-        weeks = 6
-    else:
-        program = "General Fitness"
-        weeks = 4
+async def generate_workout_plan(user: UserStats) -> WorkoutPlan:
+    payload = {
+        "age": user.age,
+        "height": user.height,
+        "weight": user.weight,
+        "activity": user.activity,
+        "goal": user.goal
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.post("http://localhost:8001/generate-plan", json=payload)
+            res.raise_for_status()
+            plan_text = res.json()["plan"]
+    except Exception as e:
+        plan_text = f"Error generating plan: {str(e)}"
 
     return WorkoutPlan(
-        title=f"{program} Program",
-        details=f"This is a {weeks}-week {program.lower()} plan tailored to your goal of '{user.goal}'."
+        title="Your AI-Generated Plan",
+        details=plan_text
     )
 
 if __name__ == "__main__":
